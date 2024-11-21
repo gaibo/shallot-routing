@@ -1,13 +1,19 @@
 import argparse
 from cmd import Cmd
 
+import shallot
+
 class ShallotClient(Cmd):
-    intro = 'Welcome to the Shallot file sharing system. Type help or ? to list commands.\n'
+    """
+    Command line handler.
+    """
+    intro = 'Type help or ? to list commands.\n'
     prompt = 'Shallot > '
 
     def do_exit(self, arg):
         """Exit the client"""
-        print('exiting')
+        print('exiting...')
+        shallot.stop_server()
         return True
 
     def do_EOF(self, arg):
@@ -20,4 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--port', default=53600, type=int,
                         help='Port to listen on (default: %(default)s)')
     args = parser.parse_args()
+
+    shallot.run_server(args.name, args.port)
+
     ShallotClient().cmdloop()
