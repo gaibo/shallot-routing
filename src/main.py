@@ -63,6 +63,34 @@ class ShallotClient(Cmd):
         tokens = (line + '.').split()
         return [name for name in list_server.cached_list if name.startswith(text)] if len(tokens) == 2 else []
 
+    def complete_receive(self, text, line, begidx, endidx):
+        """
+        Handle autocompletion for "receive" command.
+        """
+        # Divide into tokens, but treat trailing whitespace to be delimiters as well.
+        tokens = (line + '.').split()
+        match len(tokens):
+            case 2:
+                return [name for name in list_server.cached_list if name.startswith(text)]
+            case 3:
+                return [f for f in file_server.file_list_cache[tokens[1]].keys() if f.startswith(text)]
+        return []
+
+    def do_receive(self, arg):
+        """
+        Receive a file from a user.
+        Args:
+            arg: String of the format "[name] [filename]".
+
+        Returns:
+            None
+        """
+        tokens = arg.split()
+        if len(tokens) != 2:
+            self.help_send()
+        else:
+            file_server.receive(*tokens)
+
     def do_list(self, arg):
         """Fetch the list of files stored at [user]."""
         file_server.list(arg)
