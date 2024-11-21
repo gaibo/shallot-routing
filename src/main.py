@@ -86,7 +86,7 @@ def chdir_and_check_permissions(dir):
         print(f'"{dir}" is not a directory!')
         exit(1)
 
-    if not os.access(dir, os.W_OK):
+    if not os.access('.', os.W_OK):
         print(f'"{dir}" is not writable!')
         exit(1)
 
