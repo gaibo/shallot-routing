@@ -4,6 +4,7 @@ import requests
 from config import LIST_SERVER
 
 my_public_ip = None
+cached_list = None
 
 def register(name: str, port: int, pubkey: bytes):
     """
@@ -36,5 +37,7 @@ def list_nodes():
     Returns:
         Dict of all nodes, with node names as keys. Each node is a dict with fields ['ip', 'port', 'pubkey'].
     """
+    global cached_list
     r = requests.get(f'{LIST_SERVER.ADDRESS}/api/list')
-    return r.json()
+    cached_list = r.json()
+    return cached_list
