@@ -55,6 +55,18 @@ class ShallotClient(Cmd):
         else:
             file_server.send(*tokens)
 
+    def complete_list(self, text, line, begidx, endidx):
+        """
+        Handle autocompletion for "list" command.
+        """
+        # Divide into tokens, but treat trailing whitespace to be delimiters as well.
+        tokens = (line + '.').split()
+        return [name for name in list_server.cached_list if name.startswith(text)] if len(tokens) == 2 else []
+
+    def do_list(self, arg):
+        """Fetch the list of files stored at [user]."""
+        file_server.list(arg)
+
     def do_exit(self, arg):
         """Exit the client"""
         print('exiting...')
