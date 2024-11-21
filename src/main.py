@@ -2,6 +2,8 @@ import argparse
 import os
 from cmd import Cmd
 
+import file_server
+import list_server
 import shallot
 
 class ShallotClient(Cmd):
@@ -10,6 +12,48 @@ class ShallotClient(Cmd):
     """
     intro = 'Type help or ? to list commands.\n'
     prompt = 'Shallot > '
+
+    def complete_send(self, text, line, begidx, endidx):
+        """
+        Handle autocompletion for "send" command.
+        Args:
+            text: String prefix to match.
+            line: Current user input.
+            begidx: Index of the beginning of text in line.
+            endidx: Index of the end of text in line.
+
+        Returns:
+            None
+        """
+        # Divide into tokens, but treat trailing whitespace to be delimiters as well.
+        tokens = (line + '.').split()
+        match len(tokens):
+            case 2:
+                return [name for name in list_server.cached_list if name.startswith(text)]
+            case 3:
+                return [f for f in os.listdir('.') if os.path.isfile(f) and f.startswith(text)]
+        return []
+
+    def help_send(self):
+        """
+        Print help message for "help" command.
+        """
+        print('Send a file to a user.\nUsage: send [name] [filename]')
+
+    def do_send(self, arg):
+        """
+        Send a file to a user.
+        Args:
+            arg: String of the format "[name] [filename]".
+
+        Returns:
+            None
+        """
+        tokens = arg.split()
+        if len(tokens) != 2:
+            self.help_send()
+        else:
+            file_server.send(*tokens)
 
     def do_exit(self, arg):
         """Exit the client"""
