@@ -58,6 +58,7 @@ encrypted_cycle, request_id, encrypted_message, start = client.create_request(cy
 def next(cycle, k):
     return (k + 1) % len(cycle)
 
+# This the simulation of moving between client servers
 # We are currently at start and sending message to start + 1
 read_flag, end_flag, next_addr, next_port, encrypted_cycle, encrypted_message = 0,0, cycle[next(cycle, start)]['ip'], cycle[next(cycle, start)]['port'], encrypted_cycle, encrypted_message
 next_addr = ip_str_to_int(next_addr)
@@ -76,4 +77,5 @@ while True:
         client.request_map[request_id]['response'] = decrypted
         break
 
+# By end of the code, the client server should parse the request and send it to the request map
 print(client.request_map[request_id]['response'])
