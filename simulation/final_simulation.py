@@ -77,5 +77,5 @@ while True:
         client.request_map[request_id]['response'] = decrypted
         break
 
-# By end of the code, the client server should parse the request and send it to the request map
+# By end of the code, the client server should parse the request and send it to the request
 print(client.request_map[request_id]['response'])
