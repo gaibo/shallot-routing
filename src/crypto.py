@@ -71,7 +71,7 @@ def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) ->
 
     return cycle
 
-ENCRYPT_HEADER_STRUCT: Final[struct.Struct] = struct.Struct(f'!{CRYPTO.X25519_SIZE}s{CRYPTO.NONCE_SIZE}s')
+_ENCRYPT_HEADER_STRUCT: Final[struct.Struct] = struct.Struct(f'!{CRYPTO.X25519_SIZE}s{CRYPTO.NONCE_SIZE}s')
 
 def encrypt(pubkey: bytes, data: bytes) -> bytes:
     """
@@ -110,17 +110,17 @@ def decrypt(prikey: bytes, data: bytes) -> bytes:
     prikey = X25519PrivateKey.from_private_bytes(prikey)
 
     # unpack ephemeral key and nonce and use them to derive shared key
-    ephpubkey, nonce = ENCRYPT_HEADER_STRUCT.unpack_from(data)
+    ephpubkey, nonce = _ENCRYPT_HEADER_STRUCT.unpack_from(data)
     shared_key = prikey.exchange(X25519PublicKey.from_public_bytes(ephpubkey))
     derived_key = HKDF(algorithm=hashes.SHA256(), length=CRYPTO.KEY_SIZE, salt=None, info=b'shallot').derive(shared_key)
 
     cipher = Cipher(algorithms.ChaCha20(derived_key, nonce), mode=None)
     decryptor = cipher.decryptor()
-    return decryptor.update(data[ENCRYPT_HEADER_STRUCT.size:]) + decryptor.finalize()
+    return decryptor.update(data[_ENCRYPT_HEADER_STRUCT.size:]) + decryptor.finalize()
 
-HEADER_STRUCT: Final[struct.Struct] = struct.Struct('!B4sI')
+_HEADER_STRUCT: Final[struct.Struct] = struct.Struct('!B4sI')
 
-def generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
+def _generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
     """
     Generate a single header entry, excluding encryption-related metadata such as ephemeral keys.
     Args:
@@ -131,7 +131,7 @@ def generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
     Returns:
         Single header entry in byte form (unencrypted).
     """
-    return HEADER_STRUCT.pack(flags, ip, port)
+    return _HEADER_STRUCT.pack(flags, ip, port)
 
 def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id: int) -> bytes:
     """
@@ -152,7 +152,7 @@ def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id:
     for (n, u) in reversed(cycle):
         # READ & END flags
         flags = 3 if n == orig else 2 if n == dest else 0
-        entry = generate_header_entry(flags, address, port)
+        entry = _generate_header_entry(flags, address, port)
         header = encrypt(base64.b64decode(u['pubkey']), entry + header)
         # each header entry contains the *next* node's IP and port
         address = socket.inet_aton(u['ip'])
@@ -172,10 +172,10 @@ def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], i
         and next_header is the header to be passed on to the next node. It is padded so the length does not change.
     """
     decrypted = decrypt(prikey, header)
-    flags, raw_ip, port = HEADER_STRUCT.unpack_from(decrypted)
+    flags, raw_ip, port = _HEADER_STRUCT.unpack_from(decrypted)
 
     # pad length of the remainder of the header to be same as before
-    decrypted = decrypted[HEADER_STRUCT.size:]
+    decrypted = decrypted[_HEADER_STRUCT.size:]
     padding = secrets.token_bytes(len(header) - len(decrypted))
     next_header = decrypted + padding
 
