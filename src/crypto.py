@@ -16,8 +16,7 @@ from config import CRYPTO
 def pad_payload(payload: bytes, size: int) -> bytes:
     """
     Pad the payload to be at least as large as size.
-    The returned payload begins with a header (unsigned int) that indicates the actual size,
-    so it has the length (4 + size).
+    The returned payload begins with a header (unsigned int) that indicates the actual size.
     Args:
         payload: The payload to be padded.
         size: The size to pad.
@@ -27,10 +26,10 @@ def pad_payload(payload: bytes, size: int) -> bytes:
     Raises:
         ValueError: If the payload is larger than size.
     """
-    if len(payload) > size:
-        raise ValueError("payload too large")
+    if len(payload) > size or size < 4:
+        raise ValueError('size too small')
     # '!' stands for network byte ordering
-    return struct.pack(f'!I{size}s', len(payload), payload)
+    return struct.pack(f'!I{size - 4}s', len(payload), payload)
 
 def unpad_payload(payload: bytes) -> bytes:
     """
@@ -41,10 +40,10 @@ def unpad_payload(payload: bytes) -> bytes:
     Returns:
         The unpadded payload.
     """
-    size = struct.unpack_from('!I', payload)[0]
-    if 4 + size > len(payload):
-        raise ValueError("malformed payload")
-    return payload[4:4+size]
+    true_size = struct.unpack_from('!I', payload)[0]
+    if 4 + true_size > len(payload):
+        raise ValueError('malformed payload')
+    return payload[4:4+true_size]
 
 def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) -> list[tuple[str, dict]]:
     """
@@ -59,7 +58,9 @@ def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) ->
         A list of tuples in the cycle.
     """
     if length < 6:
-        raise ValueError("cycle length must be at least 6")
+        raise ValueError('cycle length must be at least 6')
+    if len(users) < length:
+        raise ValueError(f'not enough users (must have at least {length})')
     # convert to a list of tuples while excluding the orig and dest
     users_excluding_endpoints = [(k, v) for k, v in users.items() if k not in [orig, dest]]
     cycle = random.sample(users_excluding_endpoints, length - 2) # does not include orig and dest yet
@@ -132,6 +133,9 @@ def _generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
         Single header entry in byte form (unencrypted).
     """
     return _HEADER_STRUCT.pack(flags, ip, port)
+
+def get_header_size(cycle_length: int) -> int:
+    return (_HEADER_STRUCT.size + _ENCRYPT_HEADER_STRUCT.size) * cycle_length
 
 def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id: int) -> bytes:
     """

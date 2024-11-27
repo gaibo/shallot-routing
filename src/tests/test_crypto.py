@@ -43,7 +43,7 @@ class TestCrypto(unittest.TestCase):
         data = b'hello world'
         pad_length = 100
         padded_data = crypto.pad_payload(data, pad_length)
-        self.assertEqual(len(padded_data), pad_length + 4)
+        self.assertEqual(len(padded_data), pad_length)
         self.assertEqual(crypto.unpad_payload(padded_data), data)
 
     def test_generate_cycle(self):
@@ -54,9 +54,11 @@ class TestCrypto(unittest.TestCase):
 
     def test_header(self):
         req_id = 1234
-        cycle = crypto.generate_cycle(TEST_USER_LIST, 'Alice', 'Bob', 6)
+        cycle_length = 6
+        cycle = crypto.generate_cycle(TEST_USER_LIST, 'Alice', 'Bob', cycle_length)
         header = crypto.generate_header(cycle, 'Alice', 'Bob', req_id)
         orig_header_len = len(header)
+        self.assertEqual(crypto.get_header_size(cycle_length), orig_header_len)
         for x in range(6):
             f, i, p, header = crypto.decode_header(header, base64.b64decode(TEST_USER_LIST[cycle[x][0]]['prikey']))
             self.assertEqual(len(header), orig_header_len)
