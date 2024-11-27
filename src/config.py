@@ -1,6 +1,9 @@
 from typing import Final
 
 
+class SHALLOT:
+    CYCLE_LENGTH: Final[int] = 6
+
 class LIST_SERVER:
     ADDRESS: Final[str] = 'https://ldm2468.com/shallot'
 

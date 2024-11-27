@@ -131,6 +131,7 @@ def chdir_and_check_permissions(dir):
         exit(1)
 
 if __name__ == '__main__':
+    print('Initializing... (may take a few seconds)')
     parser = argparse.ArgumentParser()
     parser.add_argument('name', type=str, help='Your name (must be unique in the network)')
     parser.add_argument('-p', '--port', default=53600, type=int,
