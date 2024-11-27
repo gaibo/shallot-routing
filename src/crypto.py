@@ -76,12 +76,13 @@ ENCRYPT_HEADER_STRUCT: Final[struct.Struct] = struct.Struct(f'!{CRYPTO.X25519_SI
 def encrypt(pubkey: bytes, data: bytes) -> bytes:
     """
     Encrypt data with X25519 key exchange and ChaCha20 symmetric encryption.
+    The data can only be decrypted if the private key associated with pubkey is available.
     Args:
         pubkey: Public X25519 key as raw bytes.
         data: Data to encrypt.
 
-    Returns: Encrypted data.
-
+    Returns:
+        Encrypted data.
     """
     pubkey = X25519PublicKey.from_public_bytes(pubkey)
 
@@ -103,8 +104,8 @@ def decrypt(prikey: bytes, data: bytes) -> bytes:
         prikey: Private X25519 key as raw bytes.
         data:  Data to decrypt.
 
-    Returns: Decrypted data.
-
+    Returns:
+        Decrypted data.
     """
     prikey = X25519PrivateKey.from_private_bytes(prikey)
 
@@ -127,8 +128,8 @@ def generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
         ip: IP address as raw bytes.
         port: Port number.
 
-    Returns: Single header entry in byte form (unencrypted).
-
+    Returns:
+        Single header entry in byte form (unencrypted).
     """
     return HEADER_STRUCT.pack(flags, ip, port)
 
@@ -141,8 +142,8 @@ def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id:
         dest: Destination node.
         req_id: Request ID.
 
-    Returns: Shallot header.
-
+    Returns:
+        Shallot header.
     """
     header = b''
     # address field is request ID for last entry (see diagram in proposal document)
@@ -166,9 +167,9 @@ def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], i
         header: Header to decode.
         prikey: Private key used to decode the header.
 
-    Returns: A tuple (flags, ip, port, next_header). The first three elements are the fields in the header,
-    and next_header is the header to be passed on to the next node. It is padded so the length does not change.
-
+    Returns:
+        A tuple (flags, ip, port, next_header). The first three elements are the fields in the header,
+        and next_header is the header to be passed on to the next node. It is padded so the length does not change.
     """
     decrypted = decrypt(prikey, header)
     flags, raw_ip, port = HEADER_STRUCT.unpack_from(decrypted)
