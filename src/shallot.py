@@ -1,7 +1,7 @@
 import socketserver
 import threading
 
-from nacl.public import PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey, X25519PrivateKey
 
 import list_server
 
@@ -69,9 +69,9 @@ def run_server(name: str, port: int) -> bool:
         Whether the threads were spawned successfully.
     """
     global _refresh_thread, _server_thread
-    prikey = PrivateKey.generate()
-    pubkey = prikey.public_key
-    pubkey_bytes = bytes(pubkey)
+    prikey = X25519PrivateKey.generate()
+    pubkey = prikey.public_key()
+    pubkey_bytes = pubkey.public_bytes_raw()
 
     if not list_server.register(name, port, pubkey_bytes):
         print('Error: connection to list server failed!')
