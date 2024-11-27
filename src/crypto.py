@@ -175,7 +175,9 @@ def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], i
     flags, raw_ip, port = HEADER_STRUCT.unpack_from(decrypted)
 
     # pad length of the remainder of the header to be same as before
-    next_header = struct.pack(f'{len(header)}s', decrypted[HEADER_STRUCT.size:])
+    decrypted = decrypted[HEADER_STRUCT.size:]
+    padding = secrets.token_bytes(len(header) - len(decrypted))
+    next_header = decrypted + padding
 
     # handle origin separately (request id instead of ip)
     ip = struct.unpack('!I', raw_ip)[0] if flags == 3 else socket.inet_ntoa(raw_ip)
