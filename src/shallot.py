@@ -41,10 +41,12 @@ class ShallotHandler(socketserver.BaseRequestHandler):
         #   If flags = 2, we are the recipient of the request
         #   Decrypt the payload with our prikey (Use crypto.decrypt()) then pass the decrypted payload to
         #   file_server.handle_request()
-        #   Once it returns the response, encrypt it and send it + the unpeeled header to the next node
+        #   Once it returns the response, encrypt it (using the ephemeral public key included in the payload:
+        #   it will be the first CONFIG.X25519_SIZE bytes) and send it + the unpeeled header to the next node
         #   If flags = 3, we are the originator of the request
         #   The IP field will contain the request ID
-        #   Decrypt the payload and active_requests[req_id]['future'].set_result(decrypted_payload)
+        #   Decrypt the payload (with active_requests[req_id]['ephprikey']
+        #   then signal request completion by calling active_requests[req_id]['future'].set_result(decrypted_payload)
 
 
 async def make_request(name: str, plaintext_payload: bytes):
@@ -61,15 +63,22 @@ async def make_request(name: str, plaintext_payload: bytes):
     req_id = request_counter
     request_counter += 1  # increment global request counter
 
+    # generate ephemeral key to receive response
+    ephprikey = X25519PrivateKey.generate()
+
     # create request entry
     active_requests[req_id] = {
         'timestamp': time.perf_counter(),
+        'ephprikey': ephprikey,
         'future': asyncio.get_running_loop().create_future()
     }
 
     # generate Shallot cycle and header
     cycle = crypto.generate_cycle(list_server.cached_list, my_name, name, SHALLOT.CYCLE_LENGTH)
     header = crypto.generate_header(cycle, my_name, name, req_id)
+
+    # add ephemeral public key to request payload so the recipient node can encrypt the response payload
+    plaintext_payload = ephprikey.public_key().public_bytes_raw() + plaintext_payload
 
     # encrypt payload with recipient's public key
     dest_pubkey = base64.b64decode(list_server.cached_list[name]['pubkey'])

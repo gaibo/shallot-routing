@@ -173,7 +173,8 @@ def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], i
 
     Returns:
         A tuple (flags, ip, port, next_header). The first three elements are the fields in the header,
-        and next_header is the header to be passed on to the next node. It is padded so the length does not change.
+        and next_header is the header to be passed on to the next node (the 'unpeeled' header).
+        It is padded so the length does not change.
     """
     decrypted = decrypt(prikey, header)
     flags, raw_ip, port = _HEADER_STRUCT.unpack_from(decrypted)
