@@ -56,8 +56,10 @@ class TestCrypto(unittest.TestCase):
         req_id = 1234
         cycle = crypto.generate_cycle(TEST_USER_LIST, 'Alice', 'Bob', 6)
         header = crypto.generate_header(cycle, 'Alice', 'Bob', req_id)
+        orig_header_len = len(header)
         for x in range(6):
             f, i, p, header = crypto.decode_header(header, base64.b64decode(TEST_USER_LIST[cycle[x][0]]['prikey']))
+            self.assertEqual(len(header), orig_header_len)
             self.assertEqual(f, 3 if x == 5 else 2 if x == 2 else 0)
             self.assertEqual(i, req_id if x == 5 else TEST_USER_LIST[cycle[x + 1][0]]['ip'])
             self.assertEqual(p, 0 if x == 5 else TEST_USER_LIST[cycle[x + 1][0]]['port'])
