@@ -9,6 +9,9 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey, X2
 import crypto
 import list_server
 from config import SHALLOT
+from config import X25519_SIZE
+
+import file_server
 
 _should_exit = threading.Event()
 
@@ -26,6 +29,9 @@ def send_tcp(ip: str, port: int, data: bytes):
     if ip == list_server.my_public_ip:
         ip = 'localhost'
     # TODO open a TCP socket to the (IP, port), send the data, and close the connection
+    with socketserver.socket(socketserver.AF_INET, socketserver.SOCK_STREAM) as sock:
+        sock.connect((ip, port))
+        sock.sendall(data)
 
 class ShallotHandler(socketserver.BaseRequestHandler):
     """
@@ -47,7 +53,27 @@ class ShallotHandler(socketserver.BaseRequestHandler):
         #   The IP field will contain the request ID
         #   Decrypt the payload (with active_requests[req_id]['ephprikey']
         #   then signal request completion by calling active_requests[req_id]['future'].set_result(decrypted_payload)
-
+        data = socket.recv(1024)
+        while data:
+            data += socket.recv(1024)
+        
+        header_size = crypto.get_header_size(SHALLOT.CYCLE_LENGTH)
+        header, payload = data[:header_size], data[header_size:]
+        
+        flags, next_ip, next_port, next_header = crypto.decode_header(header)
+        
+        if flags == 0:
+            send_tcp(next_ip, next_port, next_header + payload)
+        elif flags == 2:
+            decrypted_payload = crypto.decrypt(prikey, payload)
+            eph_pubkey = X25519PublicKey.from_public_bytes(decrypted_payload[:X25519_SIZE])
+            response = file_server.handle_request(decrypted_payload[X25519_SIZE:])
+            encrypted_response = crypto.encrypt(eph_pubkey, response)
+            send_tcp(next_ip, next_port, next_header + encrypted_response)
+        elif flags == 3:
+            req_id = int(next_ip)
+            decrypted_payload = crypto.decrypt(active_requests[req_id]['ephprikey'], payload)
+            active_requests[req_id]['future'].set_result(decrypted_payload)
 
 async def make_request(name: str, plaintext_payload: bytes):
     """
