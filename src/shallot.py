@@ -129,7 +129,7 @@ class ShallotHandler(socketserver.BaseRequestHandler):
         """
         data = b""
         while True:
-            partial = recv_socket.recv(1024)
+            partial = recv_socket.recv(1024*1024)
             if not partial:
                 break
             data += partial
