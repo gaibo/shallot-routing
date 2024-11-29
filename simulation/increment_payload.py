@@ -38,7 +38,26 @@ def generate_random_ip():
 keys = {}
 elapsed_times = []
 i = 200
-while i < 2_000_000_000:
+
+# Graph line graph where x = is number of clients y = elapsed time
+import matplotlib.pyplot as plt
+import signal
+
+def signal_handler(sig, frame):
+    print('You pressed Ctrl+C!')
+    print(elapsed_times)
+    x = [i for i,j in elapsed_times]
+    y = [j for i,j in elapsed_times]
+    plt.plot(x, y)
+    plt.xlabel('Number of bytes in payload')
+    plt.ylabel('Elapsed Time')
+    plt.title('Elapsed Time vs Number of Clients')
+    plt.show()
+
+signal.signal(signal.SIGINT, signal_handler)
+
+
+while i < 1_000_000_000:
     print(i)
     # Generate keys for each person
     for name in names:
@@ -273,7 +292,7 @@ while i < 2_000_000_000:
         source_private_key = PrivateKey.generate()
         source_public_key = source_private_key.public_key
         
-        byte_array = bytes.fromhex(source_public_key.encode().hex()) + create_byte_array(text_message, i)
+        byte_array = bytes.fromhex(source_public_key.encode().hex()) + create_byte_array(text_message, i - 10)
         
         sealed_box = SealedBox(PublicKey(bytes.fromhex(keys[receiver]["public_key"])))
         encrypted = sealed_box.encrypt(byte_array)
@@ -350,9 +369,8 @@ while i < 2_000_000_000:
     decrypt_cycle(encrypted_cycle, encrypted_message)
     elapsed_times.append((i, time.time() - start_time))
     i *= 2
-
-# Graph line graph where x = is number of clients y = elapsed time
-import matplotlib.pyplot as plt
+    
+print(elapsed_times)
 x = [i for i,j in elapsed_times]
 y = [j for i,j in elapsed_times]
 plt.plot(x, y)
