@@ -6,7 +6,10 @@ import struct
 from typing import Final, Union
 
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey, X25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PublicKey,
+    X25519PrivateKey,
+)
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
@@ -31,9 +34,10 @@ def pad_payload(payload: bytes, size: int) -> bytes:
         ValueError: If the payload exceeds the specified size or if the size is less than 4 bytes.
     """
     if len(payload) > size or size < 4:
-        raise ValueError('size too small')
+        raise ValueError("size too small")
     # '!' stands for network byte ordering
-    return struct.pack(f'!I{size - 4}s', len(payload), payload)
+    return struct.pack(f"!I{size - 4}s", len(payload), payload)
+
 
 def unpad_payload(payload: bytes) -> bytes:
     """
@@ -48,12 +52,15 @@ def unpad_payload(payload: bytes) -> bytes:
     Raises:
         ValueError: If the payload structure is malformed.
     """
-    true_size = struct.unpack_from('!I', payload)[0]
+    true_size = struct.unpack_from("!I", payload)[0]
     if 4 + true_size > len(payload):
-        raise ValueError('malformed payload')
-    return payload[4:4+true_size]
+        raise ValueError("malformed payload")
+    return payload[4 : 4 + true_size]
 
-def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) -> list[tuple[str, dict]]:
+
+def generate_cycle(
+    users: dict[str, dict], orig: str, dest: str, length: int
+) -> list[tuple[str, dict]]:
     """
     Generates a Shallot routing cycle.
 
@@ -73,12 +80,16 @@ def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) ->
         ValueError: If the cycle length is less than 6 or the number of available nodes is insufficient.
     """
     if length < 6:
-        raise ValueError('cycle length must be at least 6')
+        raise ValueError("cycle length must be at least 6")
     if len(users) < length:
-        raise ValueError(f'not enough users (must have at least {length})')
+        raise ValueError(f"not enough users (must have at least {length})")
     # convert to a list of tuples while excluding the orig and dest
-    users_excluding_endpoints = [(k, v) for k, v in users.items() if k not in [orig, dest]]
-    cycle = random.sample(users_excluding_endpoints, length - 2) # does not include orig and dest yet
+    users_excluding_endpoints = [
+        (k, v) for k, v in users.items() if k not in [orig, dest]
+    ]
+    cycle = random.sample(
+        users_excluding_endpoints, length - 2
+    )  # does not include orig and dest yet
 
     # choose where to insert destination (should not be too close to origin)
     dest_loc = random.randint(2, len(cycle) - 2)
@@ -87,7 +98,11 @@ def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) ->
 
     return cycle
 
-_ENCRYPT_HEADER_STRUCT: Final[struct.Struct] = struct.Struct(f'!{CRYPTO.X25519_SIZE}s{CRYPTO.NONCE_SIZE}s')
+
+_ENCRYPT_HEADER_STRUCT: Final[struct.Struct] = struct.Struct(
+    f"!{CRYPTO.X25519_SIZE}s{CRYPTO.NONCE_SIZE}s"
+)
+
 
 def encrypt(pubkey: bytes, data: bytes) -> bytes:
     """
@@ -108,13 +123,21 @@ def encrypt(pubkey: bytes, data: bytes) -> bytes:
     # generate ephemeral key for key exchange
     ephprikey = X25519PrivateKey.generate()
     shared_key = ephprikey.exchange(pubkey)
-    derived_key = HKDF(algorithm=hashes.SHA256(), length=CRYPTO.KEY_SIZE, salt=None, info=b'shallot').derive(shared_key)
+    derived_key = HKDF(
+        algorithm=hashes.SHA256(), length=CRYPTO.KEY_SIZE, salt=None, info=b"shallot"
+    ).derive(shared_key)
 
     # use derived key to encrypt data
     nonce = secrets.token_bytes(CRYPTO.NONCE_SIZE)
     cipher = Cipher(algorithms.ChaCha20(derived_key, nonce), mode=None)
     encryptor = cipher.encryptor()
-    return ephprikey.public_key().public_bytes_raw() + nonce + encryptor.update(data) + encryptor.finalize()
+    return (
+        ephprikey.public_key().public_bytes_raw()
+        + nonce
+        + encryptor.update(data)
+        + encryptor.finalize()
+    )
+
 
 def decrypt(prikey: bytes, data: bytes) -> bytes:
     """
@@ -135,13 +158,17 @@ def decrypt(prikey: bytes, data: bytes) -> bytes:
     # unpack ephemeral key and nonce and use them to derive shared key
     ephpubkey, nonce = _ENCRYPT_HEADER_STRUCT.unpack_from(data)
     shared_key = prikey.exchange(X25519PublicKey.from_public_bytes(ephpubkey))
-    derived_key = HKDF(algorithm=hashes.SHA256(), length=CRYPTO.KEY_SIZE, salt=None, info=b'shallot').derive(shared_key)
+    derived_key = HKDF(
+        algorithm=hashes.SHA256(), length=CRYPTO.KEY_SIZE, salt=None, info=b"shallot"
+    ).derive(shared_key)
 
     cipher = Cipher(algorithms.ChaCha20(derived_key, nonce), mode=None)
     decryptor = cipher.decryptor()
-    return decryptor.update(data[_ENCRYPT_HEADER_STRUCT.size:]) + decryptor.finalize()
+    return decryptor.update(data[_ENCRYPT_HEADER_STRUCT.size :]) + decryptor.finalize()
 
-_HEADER_STRUCT: Final[struct.Struct] = struct.Struct('!B4sI')
+
+_HEADER_STRUCT: Final[struct.Struct] = struct.Struct("!B4sI")
+
 
 def _generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
     """
@@ -157,6 +184,7 @@ def _generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
     """
     return _HEADER_STRUCT.pack(flags, ip, port)
 
+
 def get_header_size(cycle_length: int) -> int:
     """
     Computes the size of a Shallot header.
@@ -169,7 +197,10 @@ def get_header_size(cycle_length: int) -> int:
     """
     return (_HEADER_STRUCT.size + _ENCRYPT_HEADER_STRUCT.size) * cycle_length
 
-def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id: int) -> bytes:
+
+def generate_header(
+    cycle: list[tuple[str, dict]], orig: str, dest: str, req_id: int
+) -> bytes:
     """
     Generates a Shallot header with encrypted routing information.
 
@@ -182,22 +213,25 @@ def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id:
     Returns:
         bytes: The encrypted Shallot header.
     """
-    header = b''
+    header = b""
     # address field is request ID for last entry (see diagram in proposal document)
-    address = struct.pack('!I', req_id)
+    address = struct.pack("!I", req_id)
     port = 0
-    for (n, u) in reversed(cycle):
+    for n, u in reversed(cycle):
         # READ & END flags
         flags = 3 if n == orig else 2 if n == dest else 0
         entry = _generate_header_entry(flags, address, port)
-        header = encrypt(base64.b64decode(u['pubkey']), entry + header)
+        header = encrypt(base64.b64decode(u["pubkey"]), entry + header)
         # each header entry contains the *next* node's IP and port
-        address = socket.inet_aton(u['ip'])
-        port = u['port']
+        address = socket.inet_aton(u["ip"])
+        port = u["port"]
 
     return header
 
-def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], int, bytes]:
+
+def decode_header(
+    header: bytes, prikey: bytes
+) -> tuple[int, Union[int, str], int, bytes]:
     """
     Decodes and processes a Shallot header at a node.
 
@@ -216,10 +250,10 @@ def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], i
     flags, raw_ip, port = _HEADER_STRUCT.unpack_from(decrypted)
 
     # pad length of the remainder of the header to be same as before
-    decrypted = decrypted[_HEADER_STRUCT.size:]
+    decrypted = decrypted[_HEADER_STRUCT.size :]
     padding = secrets.token_bytes(len(header) - len(decrypted))
     next_header = decrypted + padding
 
     # handle origin separately (request id instead of ip)
-    ip = struct.unpack('!I', raw_ip)[0] if flags == 3 else socket.inet_ntoa(raw_ip)
+    ip = struct.unpack("!I", raw_ip)[0] if flags == 3 else socket.inet_ntoa(raw_ip)
     return flags, ip, port, next_header

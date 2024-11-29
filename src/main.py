@@ -7,12 +7,14 @@ import list_server
 import shallot
 from config import cc
 
+
 class ShallotClient(Cmd):
     """
     Command line handler.
     """
-    cc.print('[magenta]SHALLOT ROUTING \n\nType help or ? to list commands.\n')
-    prompt = '>> '
+
+    cc.print("[magenta]SHALLOT ROUTING \n\nType help or ? to list commands.\n")
+    prompt = ">> "
 
     def complete_send(self, text, line, begidx, endidx):
         """
@@ -27,19 +29,25 @@ class ShallotClient(Cmd):
             None
         """
         # Divide into tokens, but treat trailing whitespace to be delimiters as well.
-        tokens = (line + '.').split()
+        tokens = (line + ".").split()
         match len(tokens):
             case 2:
-                return [name for name in list_server.cached_list if name.startswith(text)]
+                return [
+                    name for name in list_server.cached_list if name.startswith(text)
+                ]
             case 3:
-                return [f for f in os.listdir('.') if os.path.isfile(f) and f.startswith(text)]
+                return [
+                    f
+                    for f in os.listdir(".")
+                    if os.path.isfile(f) and f.startswith(text)
+                ]
         return []
 
     def help_send(self):
         """
         Print help message for "help" command.
         """
-        cc.print('[yellow]Send a file to a user.\nUsage: send [name] [filename]')
+        cc.print("[yellow]Send a file to a user.\nUsage: send [name] [filename]")
 
     def do_send(self, arg):
         """
@@ -61,20 +69,30 @@ class ShallotClient(Cmd):
         Handle autocompletion for "list" command.
         """
         # Divide into tokens, but treat trailing whitespace to be delimiters as well.
-        tokens = (line + '.').split()
-        return [name for name in list_server.cached_list if name.startswith(text)] if len(tokens) == 2 else []
+        tokens = (line + ".").split()
+        return (
+            [name for name in list_server.cached_list if name.startswith(text)]
+            if len(tokens) == 2
+            else []
+        )
 
     def complete_receive(self, text, line, begidx, endidx):
         """
         Handle autocompletion for "receive" command.
         """
         # Divide into tokens, but treat trailing whitespace to be delimiters as well.
-        tokens = (line + '.').split()
+        tokens = (line + ".").split()
         match len(tokens):
             case 2:
-                return [name for name in list_server.cached_list if name.startswith(text)]
+                return [
+                    name for name in list_server.cached_list if name.startswith(text)
+                ]
             case 3:
-                return [f for f in file_server.file_list_cache[tokens[1]].keys() if f.startswith(text)]
+                return [
+                    f
+                    for f in file_server.file_list_cache[tokens[1]].keys()
+                    if f.startswith(text)
+                ]
         return []
 
     def do_receive(self, arg):
@@ -98,13 +116,14 @@ class ShallotClient(Cmd):
 
     def do_exit(self, arg):
         """Exit the client"""
-        cc.print('[blue]Exiting...')
+        cc.print("[blue]Exiting...")
         shallot.stop_server()
         return True
 
     def do_EOF(self, arg):
         """Exit the client"""
         return self.do_exit(arg)
+
 
 def chdir_and_check_permissions(dir):
     """
@@ -127,19 +146,31 @@ def chdir_and_check_permissions(dir):
         print(f'"{dir}" is not a directory!')
         exit(1)
 
-    if not os.access('.', os.W_OK):
+    if not os.access(".", os.W_OK):
         print(f'"{dir}" is not writable!')
         exit(1)
 
-if __name__ == '__main__':
-    cc.print('[magenta]Initializing... (may take a few seconds)')
+
+if __name__ == "__main__":
+    cc.print("[magenta]Initializing... (may take a few seconds)")
     parser = argparse.ArgumentParser()
-    parser.add_argument('name', type=str, help='Your name (must be unique in the network)')
-    parser.add_argument('-p', '--port', default=53600, type=int,
-                        help='Port to listen on (default: %(default)s)')
-    parser.add_argument('-d', '--dir', default='.',
-                        help='Directory to serve files (default: "%(default)s").\n'
-                             'Important: everything in this directory will be made public!')
+    parser.add_argument(
+        "name", type=str, help="Your name (must be unique in the network)"
+    )
+    parser.add_argument(
+        "-p",
+        "--port",
+        default=53600,
+        type=int,
+        help="Port to listen on (default: %(default)s)",
+    )
+    parser.add_argument(
+        "-d",
+        "--dir",
+        default=".",
+        help='Directory to serve files (default: "%(default)s").\n'
+        "Important: everything in this directory will be made public!",
+    )
     args = parser.parse_args()
 
     chdir_and_check_permissions(args.dir)
