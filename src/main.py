@@ -5,13 +5,14 @@ from cmd import Cmd
 import file_server
 import list_server
 import shallot
+from config import cc
 
 class ShallotClient(Cmd):
     """
     Command line handler.
     """
-    intro = 'Type help or ? to list commands.\n'
-    prompt = 'Shallot > '
+    cc.print('[magenta]SHALLOT ROUTING \n\nType help or ? to list commands.\n')
+    prompt = '>> '
 
     def complete_send(self, text, line, begidx, endidx):
         """
@@ -38,7 +39,7 @@ class ShallotClient(Cmd):
         """
         Print help message for "help" command.
         """
-        print('Send a file to a user.\nUsage: send [name] [filename]')
+        cc.print('[yellow]Send a file to a user.\nUsage: send [name] [filename]')
 
     def do_send(self, arg):
         """
@@ -97,7 +98,7 @@ class ShallotClient(Cmd):
 
     def do_exit(self, arg):
         """Exit the client"""
-        print('exiting...')
+        cc.print('[blue]Exiting...')
         shallot.stop_server()
         return True
 
@@ -131,7 +132,7 @@ def chdir_and_check_permissions(dir):
         exit(1)
 
 if __name__ == '__main__':
-    print('Initializing... (may take a few seconds)')
+    cc.print('[magenta]Initializing... (may take a few seconds)')
     parser = argparse.ArgumentParser()
     parser.add_argument('name', type=str, help='Your name (must be unique in the network)')
     parser.add_argument('-p', '--port', default=53600, type=int,

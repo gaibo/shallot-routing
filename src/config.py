@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 
+from rich.console import Console
+
+cc = Console()
+
 @dataclass(frozen=True)
 class SHALLOT:
     """

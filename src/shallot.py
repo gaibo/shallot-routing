@@ -9,8 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey, X2
 
 import crypto
 import list_server
-from config import SHALLOT
-from config import CRYPTO
+from config import SHALLOT, CRYPTO, cc
 
 import file_server
 
@@ -59,9 +58,9 @@ def send_tcp(ip: str, port: int, data: bytes) -> None:
             sock.connect((ip, port))
             sock.sendall(data)  # Send the entire data
         except (socket.gaierror, socket.timeout, ConnectionRefusedError):
-            print(f"Failed to send data due to a connection issue.")
+            cc.print(f"[red]Failed to send data due to a connection issue.")
         except Exception:
-            print(f"An unexpected error occurred while sending data.")
+            cc.print(f"[red]An unexpected error occurred while sending data.")
 
     
 class ShallotHandler(socketserver.BaseRequestHandler):
@@ -109,7 +108,7 @@ class ShallotHandler(socketserver.BaseRequestHandler):
                 raise ValueError(f"Unknown flag value: {flags}")
 
         except Exception as e:
-            print(f"Error in ShallotHandler: {e}")
+            cc.print(f"[red]Error in ShallotHandler: {e}")
 
     def _receive_data(self, recv_socket: socket.socket) -> bytes:
         """
@@ -220,7 +219,7 @@ async def make_request(name: str, plaintext_payload: bytes):
         async with asyncio.timeout(30):
             res = await active_requests[req_id]['future']
     except asyncio.TimeoutError:
-        print('request timed out!')
+        cc.print('[red]Request Timed Out!')
         return None
 
     elapsed_time = time.perf_counter() - active_requests[req_id]['timestamp']
@@ -236,7 +235,7 @@ def refresh_job():
     """
     while not _should_exit.is_set():
         if not list_server.register(my_name, my_port, pubkey.public_bytes_raw()):
-            print('Warning: node registration to list server failed!')
+            cc.print('[red]Warning: node registration to list server failed!')
         _should_exit.wait(10)
 
 def server_job():
@@ -250,7 +249,7 @@ def server_job():
     with socketserver.TCPServer(('localhost', my_port), ShallotHandler) as server:
         _server = server
         server.serve_forever()
-        print('Shut down server successfully.')
+        cc.print('[green]Shut down server successfully.')
 
 def stop_server():
     """
@@ -277,11 +276,11 @@ def run_server(name: str, port: int) -> bool:
     my_name, my_port = name, port
 
     if not list_server.register(name, port, pubkey.public_bytes_raw()):
-        print('Error: connection to list server failed!')
+        cc.print('[red]Error: connection to list server failed!')
         return False
 
-    print('Connected to list server.')
-    print(f'Welcome to the Shallot file sharing system, {name}. Your public IP is {list_server.my_public_ip}.')
+    cc.print('[magenta]Connected to Shallot Server.')
+    cc.print(f'[magenta]Welcome to the Shallot File Sharing System, {name}. Your public IP is {list_server.my_public_ip}.')
 
     _refresh_thread = threading.Thread(target=refresh_job)
     _refresh_thread.start()
