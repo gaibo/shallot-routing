@@ -2,6 +2,7 @@ import asyncio
 import base64
 import time
 import socketserver
+import socket
 import threading
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey, X25519PrivateKey
@@ -9,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey, X2
 import crypto
 import list_server
 from config import SHALLOT
-from config import X25519_SIZE
+from config import CRYPTO
 
 import file_server
 
@@ -29,10 +30,16 @@ def send_tcp(ip: str, port: int, data: bytes):
     if ip == list_server.my_public_ip:
         ip = 'localhost'
     # TODO open a TCP socket to the (IP, port), send the data, and close the connection
-    with socketserver.socket(socketserver.AF_INET, socketserver.SOCK_STREAM) as sock:
-        sock.connect((ip, port))
-        sock.sendall(data)
-
+    # Create a TCP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.connect((ip, port))
+            sock.sendall(data)
+        except Exception as e:
+            print(f"Failed to send data: {e}")
+        finally:
+            pass
+    
 class ShallotHandler(socketserver.BaseRequestHandler):
     """
     Handler for incoming Shallot protocol connections.
@@ -66,8 +73,8 @@ class ShallotHandler(socketserver.BaseRequestHandler):
             send_tcp(next_ip, next_port, next_header + payload)
         elif flags == 2:
             decrypted_payload = crypto.decrypt(prikey, payload)
-            eph_pubkey = X25519PublicKey.from_public_bytes(decrypted_payload[:X25519_SIZE])
-            response = file_server.handle_request(decrypted_payload[X25519_SIZE:])
+            eph_pubkey = X25519PublicKey.from_public_bytes(decrypted_payload[:CRYPTO.X25519_SIZE])
+            response = file_server.handle_request(decrypted_payload[CRYPTO.X25519_SIZE:])
             encrypted_response = crypto.encrypt(eph_pubkey, response)
             send_tcp(next_ip, next_port, next_header + encrypted_response)
         elif flags == 3:
