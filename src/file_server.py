@@ -5,12 +5,30 @@ from typing import Dict
 import base64
 import shallot
 from crypto import pad_payload, unpad_payload
+from typing import Optional
 
 file_list_cache: Dict[str, Dict[str, int]] = {}
 
-def send(name: str, filename: str):
+def send(name: str, filename: str) -> Optional[None]:
     """
     Send a file to another user in the Shallot network.
+
+    This function reads a file from the local filesystem, encodes its contents,
+    constructs a Shallot payload, and sends the payload to a specified user
+    through the Shallot network. The response from the recipient, if any, is printed.
+
+    Args:
+        name (str): The recipient's name in the Shallot network.
+        filename (str): The name of the file to send.
+
+    Returns:
+        Optional[None]: Returns `None` if the function completes successfully.
+                        In case of errors (e.g., file not found), it prints an error message
+                        and terminates early.
+    
+    Raises:
+        Exception: Propagates exceptions related to Shallot's `make_request` if they occur
+                   during asynchronous execution.
     """
     print(f'Sending {filename} to {name}...')
     
@@ -34,9 +52,24 @@ def send(name: str, filename: str):
 
     asyncio.run(run())
 
-def receive(name: str, filename: str):
+def receive(name: str, filename: str) -> Optional[None]:
     """
     Receive a file from another user in the Shallot network.
+
+    This function requests a file from a specified user, retrieves its contents through the Shallot network, 
+    and saves the file to the local filesystem. The file must first be listed in the local file cache 
+    before requesting it.
+
+    Args:
+        name (str): The sender's name in the Shallot network.
+        filename (str): The name of the file to request.
+
+    Returns:
+        Optional[None]: Returns `None` if the function completes successfully.
+                        Prints an error message and terminates early if the file is not listed in the cache.
+
+    Raises:
+        Exception: Propagates exceptions related to Shallot's `make_request` if they occur during asynchronous execution.
     """
     print(f'Receiving {filename} from {name}...')
 
@@ -62,9 +95,23 @@ def receive(name: str, filename: str):
 
     asyncio.run(run())
 
-def list(name: str):
+def list(name: str) -> Optional[None]:
     """
     Fetch the list of files stored by another user in the Shallot network.
+
+    This function sends a request to the specified user in the Shallot network, asking for their
+    list of shared files. It updates the global file cache (`file_list_cache`) with the retrieved
+    file list and prints the available files and their sizes.
+
+    Args:
+        name (str): The user's name in the Shallot network whose file list is to be fetched.
+
+    Returns:
+        Optional[None]: Returns `None` after fetching and displaying the file list.
+                        Prints an error message and terminates early if the request fails.
+
+    Raises:
+        Exception: Propagates exceptions related to Shallot's `make_request` if they occur during asynchronous execution.
     """
     global file_list_cache
     print(f'Retrieving list of files stored by {name}...')
@@ -92,6 +139,26 @@ def list(name: str):
 def handle_request(payload: bytes) -> bytes:
     """
     Handle incoming requests (send, receive, list) and return a response.
+
+    This function processes Shallot network requests based on the specified action in the payload.
+    Supported actions:
+    - "send": Save the file received in the payload to the local filesystem.
+    - "receive": Retrieve the requested file from the local filesystem and return its contents.
+    - "list": Return a list of available files and their sizes from the local filesystem.
+
+    Args:
+        payload (bytes): The padded payload received in the request. It is expected to be a JSON-encoded object
+                         with a field `action` specifying the request type.
+
+    Returns:
+        bytes: A padded response payload. The response contains:
+               - "OK" for successful send operations.
+               - File contents for receive operations.
+               - A JSON-encoded list of files for list operations.
+               - An error message for unsupported actions or failures.
+
+    Raises:
+        Exception: Propagates exceptions related to file handling or malformed payloads if not caught in the function.
     """
     try:
         # Decode the payload
