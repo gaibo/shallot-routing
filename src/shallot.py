@@ -68,7 +68,6 @@ class ShallotHandler(socketserver.BaseRequestHandler):
             if not partial:
                 break
             data += partial
-        print(data)
         header_size = crypto.get_header_size(SHALLOT.CYCLE_LENGTH)
         header, payload = data[:header_size], data[header_size:]
         
@@ -79,14 +78,13 @@ class ShallotHandler(socketserver.BaseRequestHandler):
         elif flags == 2:
             decrypted_payload = crypto.decrypt(prikey.private_bytes_raw(), payload)
             eph_pubkey = decrypted_payload[:CRYPTO.X25519_SIZE]
-            print('decrypted_payload:', decrypted_payload[CRYPTO.X25519_SIZE:].decode())
+            
             response = file_server.handle_request(decrypted_payload[CRYPTO.X25519_SIZE:])
             encrypted_response = crypto.encrypt(eph_pubkey, response)
             send_tcp(next_ip, next_port, next_header + encrypted_response)
         elif flags == 3:
             req_id = int(next_ip)
             decrypted_payload = crypto.decrypt(active_requests[req_id]['ephprikey'].private_bytes_raw(), payload)
-            print(decrypted_payload)
             active_requests[req_id]['future'].set_result(decrypted_payload)
 
 async def make_request(name: str, plaintext_payload: bytes):
