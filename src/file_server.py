@@ -49,7 +49,7 @@ def send(name: str, filename: str) -> Optional[None]:
         }
     )
     padded_payload = pad_payload(
-        payload.encode(), 1024
+        payload.encode(), 1024*1024
     )  # Pad to a fixed size, e.g., 1KB
 
     async def run():
@@ -94,7 +94,7 @@ def receive(name: str, filename: str) -> Optional[None]:
 
     payload = json.dumps({"action": "receive", "filename": filename})
     padded_payload = pad_payload(
-        payload.encode(), 1024
+        payload.encode(), 1024*1024
     )  # Pad to a fixed size, e.g., 1KB
 
     async def run():
@@ -138,7 +138,7 @@ def list(name: str) -> Optional[None]:
 
     payload = json.dumps({"action": "list"})
     padded_payload = pad_payload(
-        payload.encode(), 1024
+        payload.encode(), 1024*1024
     )  # Pad to a fixed size, e.g., 1KB
 
     async def run():
