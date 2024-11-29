@@ -12,7 +12,14 @@ def send(name: str, filename: str):
     #   (note that it is an async function)
     #   It will return the (decrypted) response payload, which should be either 'OK' or an error message
     #   It will also return the elapsed time, which will be useful for experiments
-    payload = b'' # TODO create payload
+    
+    # Open file and read contents place into payload section    
+    
+    payload:bytes = b'' # TODO create payload
+    
+    with open(filename, 'rb') as f:
+        payload = f.read()
+    print(payload)
     async def run():
         response, time = await shallot.make_request(name, payload)
         # TODO handle response
@@ -60,4 +67,4 @@ def handle_request(payload: bytes) -> bytes:
     #   JSON might be convenient here (but for the other request types, binary data may be better)
     #   Important: for maximum security and privacy, the size of the response should be same as the size of the request
     #   Use crypto.pad_payload() as necessary
-    pass
+    return b'OK'
