@@ -58,7 +58,6 @@ def send_tcp(ip: str, port: int, data: bytes) -> None:
             # Attempt to connect to the target IP and port
             sock.connect((ip, port))
             sock.sendall(data)  # Send the entire data
-            print(f"Data sent successfully.")
         except (socket.gaierror, socket.timeout, ConnectionRefusedError):
             print(f"Failed to send data due to a connection issue.")
         except Exception:
