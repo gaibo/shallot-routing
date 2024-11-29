@@ -15,16 +15,20 @@ from config import CRYPTO
 
 def pad_payload(payload: bytes, size: int) -> bytes:
     """
-    Pad the payload to be at least as large as size.
-    The returned payload begins with a header (unsigned int) that indicates the actual size.
+    Pads the payload to a specified size.
+
+    The padded payload includes a 4-byte header indicating the actual size of the original payload.
+    The remaining bytes are filled with null data.
+
     Args:
-        payload: The payload to be padded.
-        size: The size to pad.
+        payload (bytes): The payload to be padded.
+        size (int): The total size to pad the payload to.
 
     Returns:
-        The padded payload.
+        bytes: The padded payload.
+
     Raises:
-        ValueError: If the payload is larger than size.
+        ValueError: If the payload exceeds the specified size or if the size is less than 4 bytes.
     """
     if len(payload) > size or size < 4:
         raise ValueError('size too small')
@@ -33,12 +37,16 @@ def pad_payload(payload: bytes, size: int) -> bytes:
 
 def unpad_payload(payload: bytes) -> bytes:
     """
-    Unpad a payload that was padded with the pad_payload function.
+    Removes padding from a payload padded with `pad_payload`.
+
     Args:
-        payload: The payload to be unpadded.
+        payload (bytes): The padded payload.
 
     Returns:
-        The unpadded payload.
+        bytes: The original unpadded payload.
+
+    Raises:
+        ValueError: If the payload structure is malformed.
     """
     true_size = struct.unpack_from('!I', payload)[0]
     if 4 + true_size > len(payload):
@@ -47,15 +55,22 @@ def unpad_payload(payload: bytes) -> bytes:
 
 def generate_cycle(users: dict[str, dict], orig: str, dest: str, length: int) -> list[tuple[str, dict]]:
     """
-    Generate a cycle that starts from orig, passes through dest, and returns back to orig.
+    Generates a Shallot routing cycle.
+
+    The cycle includes an origin node, a destination node, and a specified number of intermediate nodes.
+    It ensures that the destination node is not adjacent to the origin node in the cycle.
+
     Args:
-        users: Dict mapping names to users (returned from list_server.list_nodes()).
-        orig: Origin name.
-        dest: Destination name.
-        length: Length of the cycle.
+        users (dict): A dictionary of nodes, mapping node names to their metadata (e.g., IP, port, public key).
+        orig (str): The origin node's name.
+        dest (str): The destination node's name.
+        length (int): The total number of nodes in the cycle.
 
     Returns:
-        A list of tuples in the cycle.
+        list[tuple[str, dict]]: A list of nodes in the cycle, each represented as a tuple of name and metadata.
+
+    Raises:
+        ValueError: If the cycle length is less than 6 or the number of available nodes is insufficient.
     """
     if length < 6:
         raise ValueError('cycle length must be at least 6')
@@ -76,14 +91,17 @@ _ENCRYPT_HEADER_STRUCT: Final[struct.Struct] = struct.Struct(f'!{CRYPTO.X25519_S
 
 def encrypt(pubkey: bytes, data: bytes) -> bytes:
     """
-    Encrypt data with X25519 key exchange and ChaCha20 symmetric encryption.
-    The data can only be decrypted if the private key associated with pubkey is available.
+    Encrypts data using X25519 key exchange and ChaCha20 symmetric encryption.
+
+    A shared secret is derived using an ephemeral private key and the provided public key.
+    The data is then encrypted using the derived shared secret.
+
     Args:
-        pubkey: Public X25519 key as raw bytes.
-        data: Data to encrypt.
+        pubkey (bytes): The recipient's public X25519 key in raw bytes.
+        data (bytes): The plaintext data to encrypt.
 
     Returns:
-        Encrypted data.
+        bytes: The encrypted data, including the ephemeral public key and nonce.
     """
     pubkey = X25519PublicKey.from_public_bytes(pubkey)
 
@@ -100,13 +118,17 @@ def encrypt(pubkey: bytes, data: bytes) -> bytes:
 
 def decrypt(prikey: bytes, data: bytes) -> bytes:
     """
-    Decrypt data with X25519 key exchange and ChaCha20 symmetric encryption.
+    Decrypts data using X25519 key exchange and ChaCha20 symmetric encryption.
+
+    A shared secret is derived using the provided private key and the ephemeral public key included in the data.
+    The encrypted payload is then decrypted using the derived shared secret.
+
     Args:
-        prikey: Private X25519 key as raw bytes.
-        data:  Data to decrypt.
+        prikey (bytes): The recipient's private X25519 key in raw bytes.
+        data (bytes): The encrypted data, including the ephemeral public key and nonce.
 
     Returns:
-        Decrypted data.
+        bytes: The decrypted plaintext data.
     """
     prikey = X25519PrivateKey.from_private_bytes(prikey)
 
@@ -123,31 +145,42 @@ _HEADER_STRUCT: Final[struct.Struct] = struct.Struct('!B4sI')
 
 def _generate_header_entry(flags: int, ip: bytes, port: int) -> bytes:
     """
-    Generate a single header entry, excluding encryption-related metadata such as ephemeral keys.
+    Generates a single unencrypted Shallot header entry.
+
     Args:
-        flags: Shallot flags (0 for intermediate, 2 for destination, 3 for origin node).
-        ip: IP address as raw bytes.
-        port: Port number.
+        flags (int): Shallot flags (0 for intermediate, 2 for destination, 3 for origin).
+        ip (bytes): IP address in raw bytes.
+        port (int): Port number.
 
     Returns:
-        Single header entry in byte form (unencrypted).
+        bytes: The header entry in byte format.
     """
     return _HEADER_STRUCT.pack(flags, ip, port)
 
 def get_header_size(cycle_length: int) -> int:
+    """
+    Computes the size of a Shallot header.
+
+    Args:
+        cycle_length (int): The number of nodes in the cycle.
+
+    Returns:
+        int: The size of the header in bytes.
+    """
     return (_HEADER_STRUCT.size + _ENCRYPT_HEADER_STRUCT.size) * cycle_length
 
 def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id: int) -> bytes:
     """
-    Generate a Shallot header.
+    Generates a Shallot header with encrypted routing information.
+
     Args:
-        cycle: Shallot cycle.
-        orig: Originating node.
-        dest: Destination node.
-        req_id: Request ID.
+        cycle (list[tuple[str, dict]]): The Shallot cycle of nodes.
+        orig (str): The origin node's name.
+        dest (str): The destination node's name.
+        req_id (int): The request ID for the origin node.
 
     Returns:
-        Shallot header.
+        bytes: The encrypted Shallot header.
     """
     header = b''
     # address field is request ID for last entry (see diagram in proposal document)
@@ -166,15 +199,18 @@ def generate_header(cycle: list[tuple[str, dict]], orig: str, dest: str, req_id:
 
 def decode_header(header: bytes, prikey: bytes) -> tuple[int, Union[int, str], int, bytes]:
     """
-    Decode Shallot header and derive the header to be passed on to the next node, padded appropriately.
+    Decodes and processes a Shallot header at a node.
+
     Args:
-        header: Header to decode.
-        prikey: Private key used to decode the header.
+        header (bytes): The encrypted header to decode.
+        prikey (bytes): The node's private X25519 key for decryption.
 
     Returns:
-        A tuple (flags, ip, port, next_header). The first three elements are the fields in the header,
-        and next_header is the header to be passed on to the next node (the 'unpeeled' header).
-        It is padded so the length does not change.
+        tuple: A tuple containing:
+            - flags (int): The Shallot flags.
+            - ip (Union[int, str]): The IP address or request ID.
+            - port (int): The port number.
+            - next_header (bytes): The header for the next node in the cycle.
     """
     decrypted = decrypt(prikey, header)
     flags, raw_ip, port = _HEADER_STRUCT.unpack_from(decrypted)

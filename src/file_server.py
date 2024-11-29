@@ -1,63 +1,196 @@
 import asyncio
-
+import json
+import os
+from typing import Dict
+import base64
 import shallot
+from crypto import pad_payload, unpad_payload
+from typing import Optional
 
-file_list_cache = {}
+file_list_cache: Dict[str, Dict[str, int]] = {}
 
-def send(name: str, filename: str):
+def send(name: str, filename: str) -> Optional[None]:
+    """
+    Send a file to another user in the Shallot network.
+
+    This function reads a file from the local filesystem, encodes its contents,
+    constructs a Shallot payload, and sends the payload to a specified user
+    through the Shallot network. The response from the recipient, if any, is printed.
+
+    Args:
+        name (str): The recipient's name in the Shallot network.
+        filename (str): The name of the file to send.
+
+    Returns:
+        Optional[None]: Returns `None` if the function completes successfully.
+                        In case of errors (e.g., file not found), it prints an error message
+                        and terminates early.
+    
+    Raises:
+        Exception: Propagates exceptions related to Shallot's `make_request` if they occur
+                   during asynchronous execution.
+    """
     print(f'Sending {filename} to {name}...')
-    # TODO: implement send
-    #   First, construct the payload (it should contain the filename and the file contents)
-    #   After the payload is created, call shallot.make_request()
-    #   (note that it is an async function)
-    #   It will return the (decrypted) response payload, which should be either 'OK' or an error message
-    #   It will also return the elapsed time, which will be useful for experiments
-    payload = b'' # TODO create payload
+    
+    if not os.path.isfile(filename):
+        print(f"Error: File '{filename}' does not exist.")
+        return
+    
+    with open(filename, 'rb') as f:
+        file_contents = f.read()
+
+    payload = json.dumps({"action": "send", "filename": filename, "contents": base64.b64encode(file_contents).decode()})
+    padded_payload = pad_payload(payload.encode(), 1024)  # Pad to a fixed size, e.g., 1KB
+
     async def run():
-        response, time = await shallot.make_request(name, payload)
-        # TODO handle response
+        try:
+            response, elapsed_time = await shallot.make_request(name, padded_payload)
+            unpadded_response = unpad_payload(response).decode()
+            print(f"Response from {name}: {unpadded_response} (elapsed time: {elapsed_time:.2f}s)")
+        except Exception as e:
+            print(f"Error during sending: {e}")
+
     asyncio.run(run())
 
-def receive(name: str, filename: str):
-    print(f'Receiving {filename} from {name}...')
-    # TODO: implement receive
-    #   First, construct the payload (it should contain the requested filename)
-    #   Use the file list cache to make sure that the payload is large enough to fit the file contents
-    #   (This is important because the payload should remain the same size for the whole loop!)
-    #   If the file does not exist in the local cache (maybe because the user did not run the "list" command yet),
-    #   give up or warn the user that privacy might suffer
-    #   After the payload is created, call shallot.make_request()
-    #   (note that it is an async function)
-    #   It will return the (decrypted) response payload, which should either be an error or contain the requested file
-    #   Handle either appropriately (e.g., create a new file with the provided contents)
-    #   It will also return the elapsed time, which will be useful for experiments
+def receive(name: str, filename: str) -> Optional[None]:
+    """
+    Receive a file from another user in the Shallot network.
 
-def list(name: str):
-    # TODO: implement list
-    #   First, construct the payload (it can be empty, but it still has to be large enough to fit the file list)
-    #   Since the size of the file list cannot be known ahead of time, just create a reasonably large buffer
-    #   (Remember that the payload should remain the same size for the whole loop!)
-    #   After the payload is created, call shallot.make_request()
-    #   (note that it is an async function)
-    #   It will return the (decrypted) response payload, which should contain the file list in JSON format (or similar)
-    #   Add the file list to the file_list_cache, which will be important for preallocating space for 'receive' commands
-    #   It will also return the elapsed time, which will be useful for experiments
+    This function requests a file from a specified user, retrieves its contents through the Shallot network, 
+    and saves the file to the local filesystem. The file must first be listed in the local file cache 
+    before requesting it.
+
+    Args:
+        name (str): The sender's name in the Shallot network.
+        filename (str): The name of the file to request.
+
+    Returns:
+        Optional[None]: Returns `None` if the function completes successfully.
+                        Prints an error message and terminates early if the file is not listed in the cache.
+
+    Raises:
+        Exception: Propagates exceptions related to Shallot's `make_request` if they occur during asynchronous execution.
+    """
+    print(f'Receiving {filename} from {name}...')
+
+    if name not in file_list_cache or filename not in file_list_cache[name]:
+        print(f"Error: File '{filename}' not listed in cache. Use the 'list' command first.")
+        return
+
+    payload = json.dumps({"action": "receive", "filename": filename})
+    padded_payload = pad_payload(payload.encode(), 1024)  # Pad to a fixed size, e.g., 1KB
+
+    async def run():
+        try:
+            response, elapsed_time = await shallot.make_request(name, padded_payload)
+            unpadded_response = unpad_payload(response)
+
+            # Save the received file contents
+            with open(filename, 'wb') as f:
+                f.write(unpadded_response)
+
+            print(f"File '{filename}' received successfully (elapsed time: {elapsed_time:.2f}s).")
+        except Exception as e:
+            print(f"Error during receiving: {e}")
+
+    asyncio.run(run())
+
+def list(name: str) -> Optional[None]:
+    """
+    Fetch the list of files stored by another user in the Shallot network.
+
+    This function sends a request to the specified user in the Shallot network, asking for their
+    list of shared files. It updates the global file cache (`file_list_cache`) with the retrieved
+    file list and prints the available files and their sizes.
+
+    Args:
+        name (str): The user's name in the Shallot network whose file list is to be fetched.
+
+    Returns:
+        Optional[None]: Returns `None` after fetching and displaying the file list.
+                        Prints an error message and terminates early if the request fails.
+
+    Raises:
+        Exception: Propagates exceptions related to Shallot's `make_request` if they occur during asynchronous execution.
+    """
     global file_list_cache
     print(f'Retrieving list of files stored by {name}...')
-    # TODO: populate l with retrieved file list
-    l = { 'a.txt': 53600, 'b.txt': 12345 }  # this is an example of file list format, with file sizes in bytes
-    file_list_cache[name] = l  # update the file list cache
-    return l
+
+    payload = json.dumps({"action": "list"})
+    padded_payload = pad_payload(payload.encode(), 1024)  # Pad to a fixed size, e.g., 1KB
+
+    async def run():
+        try:
+            response, elapsed_time = await shallot.make_request(name, padded_payload)
+            unpadded_response = unpad_payload(response).decode()
+
+            file_list = json.loads(unpadded_response)
+            file_list_cache[name] = file_list
+
+            print(f"Files available from {name}:")
+            for fname, fsize in file_list.items():
+                print(f"  {fname} ({fsize} bytes)")
+
+        except Exception as e:
+            print(f"Error during file listing: {e}")
+
+    asyncio.run(run())
 
 def handle_request(payload: bytes) -> bytes:
-    # TODO: First, parse the payload to determine the type of request (send, receive, or list)
-    #   Then, handle the request appropriately
-    #   (e.g., for send requests, create a file with the appropriate name and contents)
-    #   Then, return a response payload
-    #   For 'send' requests, this is just a simple 'OK' or an error message
-    #   For 'receive' requests, this is the contents of the requested file (or an error)
-    #   For 'list' requests, this is a list of the files stored in the server (filename and file size info)
-    #   JSON might be convenient here (but for the other request types, binary data may be better)
-    #   Important: for maximum security and privacy, the size of the response should be same as the size of the request
-    #   Use crypto.pad_payload() as necessary
-    pass
+    """
+    Handle incoming requests (send, receive, list) and return a response.
+
+    This function processes Shallot network requests based on the specified action in the payload.
+    Supported actions:
+    - "send": Save the file received in the payload to the local filesystem.
+    - "receive": Retrieve the requested file from the local filesystem and return its contents.
+    - "list": Return a list of available files and their sizes from the local filesystem.
+
+    Args:
+        payload (bytes): The padded payload received in the request. It is expected to be a JSON-encoded object
+                         with a field `action` specifying the request type.
+
+    Returns:
+        bytes: A padded response payload. The response contains:
+               - "OK" for successful send operations.
+               - File contents for receive operations.
+               - A JSON-encoded list of files for list operations.
+               - An error message for unsupported actions or failures.
+
+    Raises:
+        Exception: Propagates exceptions related to file handling or malformed payloads if not caught in the function.
+    """
+    try:
+        # Decode the payload
+        request = json.loads(unpad_payload(payload).decode())
+        action = request.get("action")
+
+        if action == "send":
+            # Handle send request
+            filename = request["filename"]
+            contents = base64.b64decode(request["contents"])
+            with open(filename, 'wb') as f:
+                f.write(contents)
+            return pad_payload(b"OK", len(payload))
+
+        elif action == "receive":
+            # Handle receive request
+            filename = request["filename"]
+            if not os.path.isfile(filename):
+                return pad_payload(b"Error: File not found.", len(payload))
+
+            with open(filename, 'rb') as f:
+                file_contents = f.read()
+            return pad_payload(file_contents, len(payload))
+
+        elif action == "list":
+            # Handle list request
+            file_list = {f: os.path.getsize(f) for f in os.listdir() if os.path.isfile(f)}
+            return pad_payload(json.dumps(file_list).encode(), len(payload))
+
+        else:
+            return pad_payload(b"Error: Unknown action.", len(payload))
+
+    except Exception as e:
+        print(f"Error handling request: {e}")
+        return pad_payload(b"Error processing request.", len(payload))
