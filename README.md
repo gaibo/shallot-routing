@@ -95,20 +95,17 @@ Shallot Routing is an implementation of an onion-routing-inspired protocol desig
 
 ## **Usage**
 
-**Send a File**
-Send a file to another node in the network:
+1.  Send a file to another node in the network:
 ```bash
 >> send <node_x> <file_x>
 ```
 
-**Receive a File**
-Request a file from another node:
+2. Request a file from another node:
 ```bash
 >> receive <node_y> <file_y>
 ```
 
-**List Files**
-List files available on another node:
+3. List files available on another node:
 ```bash
 >> list <node_z>
 ```
