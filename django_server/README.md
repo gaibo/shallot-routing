@@ -2,8 +2,7 @@
 This is a basic Django http server that manages the list of nodes connected to a Shallot network.
 
 ## Important Setup
-Copy `default.env` to `.env` and **change the default settings**. Note that the server currently does not accept
-requests coming from `localhost`.
+Copy the template `default.env` to a new file `.env` (i.e. `cp default.env .env`) and **change the default settings** (e.g. `SECRET_KEY="my_changed_secret_key"`). Note that the server currently does not accept requests coming from `localhost`.
 
 ## API Documentation
 ```

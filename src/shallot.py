@@ -16,6 +16,8 @@ from config import SHALLOT, CRYPTO, cc
 
 import file_server
 
+import json
+
 _should_exit = threading.Event()
 
 my_name = ""
@@ -28,7 +30,20 @@ active_requests = {}
 prikey = X25519PrivateKey.generate()
 pubkey = prikey.public_key()
 
+DIAG_MODE = True    # Set True for comprehensive print statements
+
 import socket
+
+
+def diagccprint(str_to_print, highlight=False, style='grey50', **cc_kwargs):
+    if DIAG_MODE:
+        cc.print(str_to_print, highlight=highlight, style=style, **cc_kwargs)
+
+
+def prettydict(dict_to_print: dict) -> str:
+    # Convert a dictionary into pretty-print string
+    my_dict_str = json.dumps(dict_to_print, sort_keys=False, indent=4, default=str)
+    return my_dict_str
 
 
 def send_tcp(ip: str, port: int, data: bytes) -> None:
@@ -59,6 +74,10 @@ def send_tcp(ip: str, port: int, data: bytes) -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
             # Attempt to connect to the target IP and port
+            # sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # sock.bind((ip, my_port))    # Apparently can't do this because the designated port is used for our server
+            # Note that we must send out of a localhost ephemeral port - our designated port is used by our server
+            # This makes tracking who sent to us and who we sent to way more difficult! Can't just check the list server
             sock.connect((ip, port))
             sock.sendall(data)  # Send the entire data
         except (socket.gaierror, socket.timeout, ConnectionRefusedError):
@@ -115,6 +134,7 @@ class ShallotHandler(socketserver.BaseRequestHandler):
                 raise ValueError(f"Unknown flag value: {flags}")
 
         except Exception as e:
+            # e being a number like 3288128678 may indicate trying to read from your own send socket
             cc.print(f"[red]Error in ShallotHandler: {e}")
 
     def _receive_data(self, recv_socket: socket.socket) -> bytes:
@@ -135,6 +155,17 @@ class ShallotHandler(socketserver.BaseRequestHandler):
             data += partial
         return data
 
+    def get_name_from_list_server(ip, port):
+        # print(ip, port)
+        found_name = None
+        for name in list_server.cached_list.keys():
+            # print(list_server.cached_list[name]['ip'], list_server.cached_list[name]['port'])
+            if (list_server.cached_list[name]['ip'] == ip 
+                and list_server.cached_list[name]['port'] == port):
+                found_name = name
+                break
+        return found_name   # None if not found
+
     def _handle_intermediate(
         self, next_ip: str, next_port: int, next_header: bytes, payload: bytes
     ) -> None:
@@ -147,7 +178,27 @@ class ShallotHandler(socketserver.BaseRequestHandler):
             next_header (bytes): The next header for the forwarded request.
             payload (bytes): The unmodified payload.
         """
+        prev_ip, prev_port = self.client_address
+        prev_name = ShallotHandler.get_name_from_list_server(prev_ip, prev_port)
+        # assert prev_name, "We should be receiving from one of the other nodes known by the list server"
+        if not prev_name:
+            # May not be able to get this from list server if prev is also localhost, using ephemeral port!
+            prev_name = "AMBIG_LOCALHOST_EPHEM_PORT"
+        diagccprint(f"ShallotHandler: handle_intermediate():\n"
+                    f"  Received Shallot message from: '{prev_name}' ({prev_ip}, {prev_port})")
+        
         send_tcp(next_ip, next_port, next_header + payload)
+
+        next_name = ShallotHandler.get_name_from_list_server(next_ip, next_port)
+        # assert next_name, "We should be sending to one of the other nodes known by the list server"
+        if next_name is None:
+            diagccprint("WARNING: Node name NOT found on list server, but we were able to send to it "
+                        "which means it is operational. List server was too slow to update!")
+        diagccprint(f"ShallotHandler: handle_intermediate():\n"
+                    f"  Sent Shallot message to: '{next_name}' ({next_ip}, {next_port})")
+        diagccprint(f"SUCCESS: '{prev_name}' ({prev_ip}, {prev_port}) "
+                    f"-> US (INTERMEDIATE) "
+                    f"-> '{next_name}' ({next_ip}, {next_port})")
 
     def _handle_recipient(
         self, next_ip: str, next_port: int, next_header: bytes, payload: bytes
@@ -166,6 +217,7 @@ class ShallotHandler(socketserver.BaseRequestHandler):
         eph_pubkey = decrypted_payload[: CRYPTO.X25519_SIZE]
 
         # Process the request and generate a response
+        diagccprint("ShallotHandler: handle_recipient(): Handling request...")
         response = file_server.handle_request(decrypted_payload[CRYPTO.X25519_SIZE :])
 
         # Encrypt the response using the ephemeral public key
@@ -173,6 +225,20 @@ class ShallotHandler(socketserver.BaseRequestHandler):
 
         # Forward the response to the next node
         send_tcp(next_ip, next_port, next_header + encrypted_response)
+
+        prev_ip, prev_port = self.client_address
+        prev_name = ShallotHandler.get_name_from_list_server(prev_ip, prev_port)
+        # assert prev_name, "We should be receiving from one of the other nodes known by the list server"
+        if not prev_name:
+            # May not be able to get this from list server if prev is also localhost, using ephemeral port!
+            prev_name = "AMBIG_LOCALHOST_EPHEM_PORT"
+        next_name = ShallotHandler.get_name_from_list_server(next_ip, next_port)
+        if next_name is None:
+            diagccprint("WARNING: Node name NOT found on list server, but we were able to send to it "
+                        "which means it is operational. List server was too slow to update!")
+        diagccprint(f"SUCCESS: '{prev_name}' ({prev_ip}, {prev_port}) "
+                    f"-> US (RECIPIENT) "
+                    f"-> '{next_name}' ({next_ip}, {next_port})")
 
     def _handle_originator(self, next_ip: Union[int, str], payload: bytes) -> None:
         """
@@ -182,13 +248,23 @@ class ShallotHandler(socketserver.BaseRequestHandler):
             next_ip (Union[int, str]): The request ID encoded as the IP field.
             payload (bytes): The encrypted payload containing the response.
         """
+        prev_ip, prev_port = self.client_address
+        prev_name = ShallotHandler.get_name_from_list_server(prev_ip, prev_port)
+        # assert prev_name, "We should be receiving from one of the other nodes known by the list server"
+        if not prev_name:
+            # May not be able to get this from list server if prev is also localhost, using ephemeral port!
+            prev_name = "AMBIG_LOCALHOST_EPHEM_PORT"
+        diagccprint(f"SUCCESS: '{prev_name}' ({prev_ip}, {prev_port}) -> US (ORIGINATOR)")
+
         req_id = int(next_ip)
         decrypted_payload = crypto.decrypt(
             active_requests[req_id]["ephprikey"].private_bytes_raw(), payload
         )
 
         # Complete the request by setting the result of the associated future
+        diagccprint(f"ShallotHandler: handle_originator(): req_id {req_id}: 'active_requests' table:\n{prettydict(active_requests)}")
         active_requests[req_id]["future"].set_result(decrypted_payload)
+        diagccprint(f"ShallotHandler: handle_originator(): req_id {req_id}: Set 'future' result in 'active_requests' table:\n{prettydict(active_requests)}")
 
 
 async def make_request(name: str, plaintext_payload: bytes):
@@ -203,22 +279,16 @@ async def make_request(name: str, plaintext_payload: bytes):
     """
     global request_counter
     req_id = request_counter
-    request_counter += 1  # increment global request counter
+    request_counter += 1    # Increment global request counter; our req_id is now unconnected
 
     # generate ephemeral key to receive response
     ephprikey = X25519PrivateKey.generate()
-
-    # create request entry
-    active_requests[req_id] = {
-        "timestamp": time.perf_counter(),
-        "ephprikey": ephprikey,
-        "future": asyncio.get_running_loop().create_future(),
-    }
 
     # generate Shallot cycle and header
     cycle = crypto.generate_cycle(
         list_server.cached_list, my_name, name, SHALLOT.CYCLE_LENGTH
     )
+    diagccprint(f"make_request(): Targeting user '{name}', Shallot cycle generated:\n{[n for n, _ in cycle]}")
     header = crypto.generate_header(cycle, my_name, name, req_id)
 
     # add ephemeral public key to request payload so the recipient node can encrypt the response payload
@@ -228,18 +298,43 @@ async def make_request(name: str, plaintext_payload: bytes):
     dest_pubkey = base64.b64decode(list_server.cached_list[name]["pubkey"])
     encrypted_payload = crypto.encrypt(dest_pubkey, plaintext_payload)
 
+    # create request entry
+    future = asyncio.get_running_loop().create_future()     # Future will be asynchronously filled with result
+    active_requests[req_id] = {
+        "timestamp": time.perf_counter(),
+        "ephprikey": ephprikey,
+        "future": future,
+    }
+    diagccprint(f"make_request(): req_id {req_id}: Added to 'active_requests' table:\n{prettydict(active_requests)}")
+
     send_tcp(cycle[0][1]["ip"], cycle[0][1]["port"], header + encrypted_payload)
 
-    # wait until response is received
+    # Wait until response is received (or timeout is enforced!)
+    # We'll try an exponentially growing wait time to work for quick "list" and slow "send"/"receive"
+    SHALLOT_INITIAL_WAIT = 0.001    # Found empirically
+    SHALLOT_WAIT_DOUBLE_LIMIT = 10  # 0.001 * 2**15 = half a minute
+    timeout_wait = SHALLOT_INITIAL_WAIT
+    double_counter = 0
+    while not future.done():
+        diagccprint(f"make_request(): req_id {req_id}: Waiting for response {timeout_wait:.3f}s")
+        await asyncio.sleep(timeout_wait)  # time.sleep(1)
+        timeout_wait *= 2
+        double_counter += 1
+        if double_counter > SHALLOT_WAIT_DOUBLE_LIMIT:
+            break   # Timeout enforced
+    
+    # Try to extract the response
     try:
-        async with asyncio.timeout(30):
-            res = await active_requests[req_id]["future"]
-    except asyncio.TimeoutError:
+        res = future.result()
+        diagccprint(f"make_request(): req_id {req_id}: Got response!")
+    except asyncio.InvalidStateError:
         cc.print("[red]Request Timed Out!")
-        return None
+        res = None  # NOTE: We still return a None and elapsed time; caller of make_request() will deal with that...
 
+    # Clean up and return regardless of whether a response arrived before timeout
     elapsed_time = time.perf_counter() - active_requests[req_id]["timestamp"]
     del active_requests[req_id]
+    diagccprint(f"make_request(): req_id {req_id}: Deleted from 'active_requests' table:\n{prettydict(active_requests)}")
     return res, elapsed_time
 
 
@@ -295,14 +390,21 @@ def run_server(name: str, port: int) -> bool:
     global _refresh_thread, _server_thread, pubkey, prikey, my_name, my_port
     my_name, my_port = name, port
 
+    cached_list = list_server.list_nodes()
+    if name in cached_list.keys():
+        cc.print(f"[red]Failed: Username '{name}' is not unique, according to list server! "
+                 f"Choose something else or wait for this name to become available.")
+        import sys
+        sys.exit(1)
+    
     if not list_server.register(name, port, pubkey.public_bytes_raw()):
         cc.print("[red]Error: connection to list server failed!")
         return False
 
     cc.print("[magenta]Connected to Shallot Server.")
     cc.print(
-        f"[magenta]Welcome to the Shallot File Sharing System, {name}. Your public IP is {list_server.my_public_ip}."
-    )
+        f"[magenta]Welcome to the Shallot File Sharing System, '{name}'. Your public IP is {list_server.my_public_ip}."
+    )   # NOTE: This is specific to file_server application - we should eventually separate shallot backbone from app
 
     _refresh_thread = threading.Thread(target=refresh_job)
     _refresh_thread.start()

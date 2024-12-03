@@ -45,9 +45,27 @@ class ShallotClient(Cmd):
 
     def help_send(self):
         """
-        Print help message for "help" command.
+        Print help message for "send" command.
         """
-        cc.print("[yellow]Send a file to a user.\nUsage: send [name] [filename]")
+        cc.print("[yellow]Send a file to a user.\nUsage: send \[name] \[filename]")
+
+    def spaced_filename_splitter(my_str):
+        """
+        "gaibo 'requirements - Copy (3).txt'" 
+        -> ['gaibo', 'requirements - Copy (3).txt']
+        """
+        quote_split_list = my_str.split("'")
+        if len(quote_split_list) == 1:
+            # Perform normal space splitting
+            arg = quote_split_list[0]
+            tokens = arg.split()
+        else:
+            # Perform special quote splitting
+            tokens = []
+            for el in quote_split_list:
+                if el != '':
+                    tokens.append(el.strip())
+        return tokens
 
     def do_send(self, arg):
         """
@@ -58,7 +76,8 @@ class ShallotClient(Cmd):
         Returns:
             None
         """
-        tokens = arg.split()
+        # tokens = arg.split()
+        tokens = ShallotClient.spaced_filename_splitter(arg)
         if len(tokens) != 2:
             self.help_send()
         else:
@@ -95,6 +114,12 @@ class ShallotClient(Cmd):
                 ]
         return []
 
+    def help_receive(self):
+        """
+        Print help message for "receive" command.
+        """
+        cc.print("[yellow]Receive a file from a user.\nUsage: receive \[name] \[filename]")
+
     def do_receive(self, arg):
         """
         Receive a file from a user.
@@ -104,15 +129,29 @@ class ShallotClient(Cmd):
         Returns:
             None
         """
-        tokens = arg.split()
+        # tokens = arg.split()
+        tokens = ShallotClient.spaced_filename_splitter(arg)
         if len(tokens) != 2:
-            self.help_send()
+            self.help_receive()
         else:
             file_server.receive(*tokens)
 
+    def help_list(self):
+        """
+        Print help message for "list" command.
+        """
+        cc.print("[yellow]Fetch the list of files stored at user.\nUsage: list \[name]")
+
     def do_list(self, arg):
         """Fetch the list of files stored at [user]."""
-        file_server.list(arg)
+        # print(f"here's the arg of 'list':\n{arg}")
+        if arg == '':
+            arg = shallot.my_name   # To mimic real 'ls'
+        tokens = arg.split()
+        if len(tokens) != 1:
+            self.help_list()
+        else:
+            file_server.list(arg)
 
     def do_exit(self, arg):
         """Exit the client"""
@@ -155,24 +194,34 @@ if __name__ == "__main__":
     cc.print("[magenta]Initializing... (may take a few seconds)")
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "name", type=str, help="Your name (must be unique in the network)"
+        "name", type=str, help="your username (must be unique in the network)"
     )
     parser.add_argument(
         "-p",
         "--port",
         default=53600,
         type=int,
-        help="Port to listen on (default: %(default)s)",
+        help="port to listen on (default: %(default)s)",
     )
     parser.add_argument(
         "-d",
         "--dir",
         default=".",
-        help='Directory to serve files (default: "%(default)s").\n'
-        "Important: everything in this directory will be made public!",
+        help='directory to serve files (default: "%(default)s").\n'
+        "IMPORTANT: everything in this directory will be made public!",
+    )
+    parser.add_argument(
+        "-D",
+        "--diag_mode",
+        action='store_true',
+        help='set to print low-level diagnostics; good for demos!'
     )
     args = parser.parse_args()
 
-    chdir_and_check_permissions(args.dir)
+    chdir_and_check_permissions(args.dir)   # All subsequent operations are from POV inside this selected dir
+    if args.diag_mode:
+        cc.print("[grey50]Diagnostic/demo mode on!")
+    shallot.DIAG_MODE = args.diag_mode
+    file_server.DIAG_MODE = args.diag_mode
     shallot.run_server(args.name, args.port)
     ShallotClient().cmdloop()
