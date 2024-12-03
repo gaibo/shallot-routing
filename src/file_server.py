@@ -8,6 +8,17 @@ from crypto import pad_payload, unpad_payload
 from typing import Optional
 from config import cc
 
+
+DIAG_MODE = True    # Set True for comprehensive print statements
+def diagccprint(str_to_print, highlight=False, style='grey50', **cc_kwargs):
+    if DIAG_MODE:
+        cc.print(str_to_print, highlight=highlight, style=style, **cc_kwargs)
+def prettydict(dict_to_print: dict) -> str:
+    # Convert a dictionary into pretty-print string
+    my_dict_str = json.dumps(dict_to_print, sort_keys=False, indent=4, default=str)
+    return my_dict_str
+
+
 file_list_cache: Dict[str, Dict[str, int]] = {}
 
 
@@ -32,15 +43,23 @@ def send(name: str, filename: str) -> Optional[None]:
         Exception: Propagates exceptions related to Shallot's `make_request` if they occur
                    during asynchronous execution.
     """
-    cc.print(f"[blue]Sending {filename} to {name}...")
-
     if not os.path.isfile(filename):
         cc.print(f"[red]Error: File '{filename}' does not exist.")
         return
-
     with open(filename, "rb") as f:
         file_contents = f.read()
+    
+    # Sanitize filename - since we preserve filename when writing to recipient's machine, 
+    # it's a huge security risk to allow filename='../../important_system_file.txt'
+    filename_sanitize_list = filename.split('/')
+    filename = filename_sanitize_list[-1]
+    if len(filename_sanitize_list) != 1:
+        diagccprint(f"send(): Sanitized filename to '{filename}' before sending")
 
+    cc.print(f"[blue]Sending '{filename}' to user '{name}'...")
+
+    # NOTE: File content bytes are converted to a base64 version (still bytes), then interpreted 
+    #       with UTF-8 into a string for sending in this JSON dict.
     payload = json.dumps(
         {
             "action": "send",
@@ -50,14 +69,14 @@ def send(name: str, filename: str) -> Optional[None]:
     )
     padded_payload = pad_payload(
         payload.encode(), 1024*1024
-    )  # Pad to a fixed size, e.g., 1KB
+    )  # Pad to a fixed size, e.g., 1KB (1024) or 1MB (1024*1024)
 
     async def run():
         try:
             response, elapsed_time = await shallot.make_request(name, padded_payload)
-            unpadded_response = unpad_payload(response).decode()
+            unpadded_response = unpad_payload(response).decode()    # Anticipated response is bytes b"OK"
             cc.print(
-                f"[blue]Response from {name}: {unpadded_response} (elapsed time: {elapsed_time:.2f}s)"
+                f"[blue]Response from user '{name}': {unpadded_response} (elapsed time: {elapsed_time:.2f}s)."
             )
         except Exception as e:
             cc.print(f"[red]Error during sending: {e}")
@@ -84,7 +103,7 @@ def receive(name: str, filename: str) -> Optional[None]:
     Raises:
         Exception: Propagates exceptions related to Shallot's `make_request` if they occur during asynchronous execution.
     """
-    cc.print(f"[blue]Receiving {filename} from {name}...")
+    cc.print(f"[blue]Receiving '{filename}' from user '{name}'...")
 
     if name not in file_list_cache or filename not in file_list_cache[name]:
         cc.print(
@@ -95,12 +114,12 @@ def receive(name: str, filename: str) -> Optional[None]:
     payload = json.dumps({"action": "receive", "filename": filename})
     padded_payload = pad_payload(
         payload.encode(), 1024*1024
-    )  # Pad to a fixed size, e.g., 1KB
+    )  # Pad to a fixed size, e.g., 1KB (1024) or 1MB (1024*1024)
 
     async def run():
         try:
             response, elapsed_time = await shallot.make_request(name, padded_payload)
-            unpadded_response = unpad_payload(response)
+            unpadded_response = unpad_payload(response)     # No .decode() to str needed, will directly write bytes
 
             # Save the received file contents
             with open(filename, "wb") as f:
@@ -134,27 +153,42 @@ def list(name: str) -> Optional[None]:
         Exception: Propagates exceptions related to Shallot's `make_request` if they occur during asynchronous execution.
     """
     global file_list_cache
-    cc.print(f"[blue]Retrieving list of files stored by {name}...")
+    cc.print(f"[blue]Retrieving list of files stored by user '{name}'...")
 
     payload = json.dumps({"action": "list"})
     padded_payload = pad_payload(
         payload.encode(), 1024*1024
-    )  # Pad to a fixed size, e.g., 1KB
+    )  # Pad to a fixed size, e.g., 1KB (1024) or 1MB (1024*1024)
+
+    if name == shallot.my_name:
+        # We should not make/send a request to ourselves!
+        cc.print("[blue]Files available from YOU (to others):")
+        my_file_list = {f: os.path.getsize(f) for f in os.listdir() if os.path.isfile(f)}
+        for fname, fsize in my_file_list.items():
+            cc.print(f"[yellow]  '{fname}'\t({fsize} bytes)")
+        cc.print("[blue](elapsed time: N/A).")
+        return  # Short-circuit, don't need to execute outward request
 
     async def run():
         try:
             response, elapsed_time = await shallot.make_request(name, padded_payload)
+            if response is None:
+                cc.print(f"[red]Failed to obtain response (elapsed time: {elapsed_time:.2f}s).\n"
+                         f"[yellow]Likely a node has exited the network, but list server is not yet aware - "
+                         f"no action is needed, just give the list server a minute and retry!")
+                return
             unpadded_response = unpad_payload(response).decode()
 
-            file_list = json.loads(unpadded_response)
-            file_list_cache[name] = file_list
+            file_list = json.loads(unpadded_response)   # "file_list" is actually a dict of {filename: size in bytes}
+            file_list_cache[name] = file_list   # Update global cache - this is all you'll be allowed to receive()
 
-            cc.print(f"[blue]Files available from {name}:")
+            cc.print(f"[blue]Files available from user '{name}':")
             for fname, fsize in file_list.items():
-                cc.print(f"[yellow]  {fname} ({fsize} bytes)")
+                cc.print(f"[yellow]  '{fname}'\t({fsize} bytes)")
+            cc.print(f"[blue](elapsed time: {elapsed_time:.2f}s).")
 
         except Exception as e:
-            cc.print(f"[red]Error during file listing: {e}")
+            cc.print(f"[red]Failed to list files: {e}")
 
     asyncio.run(run())
 
@@ -186,31 +220,34 @@ def handle_request(payload: bytes) -> bytes:
     try:
         # Decode the payload
         request = json.loads(unpad_payload(payload).decode())
-        action = request.get("action")
+        action = request.get("action")  # All functionality requests come with at least "action" specified
 
         if action == "send":
             # Handle send request
             filename = request["filename"]
-            contents = base64.b64decode(request["contents"])
+            contents = base64.b64decode(request["contents"])    # Convert string of base64-format bytes back into bytes
             with open(filename, "wb") as f:
                 f.write(contents)
-            return pad_payload(b"OK", len(payload))
+            diagccprint(f"handle_request(): 'send': '{filename}' received and written; sending back b'OK'!")
+            return pad_payload(b"OK", len(payload))     # Match length of payload - everything should be same size
 
         elif action == "receive":
             # Handle receive request
             filename = request["filename"]
             if not os.path.isfile(filename):
+                # Since receive() already confirmed in list cache, this only happens if responder removes their file
                 return pad_payload(b"Error: File not found.", len(payload))
-
             with open(filename, "rb") as f:
                 file_contents = f.read()
-            return pad_payload(file_contents, len(payload))
+            diagccprint(f"handle_request(): 'receive': '{filename}' requested; sending it back!")
+            return pad_payload(file_contents, len(payload))     # No base64 this time, since it's not string'd for JSON?
 
         elif action == "list":
             # Handle list request
             file_list = {
                 f: os.path.getsize(f) for f in os.listdir() if os.path.isfile(f)
             }
+            diagccprint(f"handle_request(): 'list': file list requested; sending it back!")
             return pad_payload(json.dumps(file_list).encode(), len(payload))
 
         else:
