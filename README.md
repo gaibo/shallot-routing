@@ -23,7 +23,7 @@ Shallot Routing is an implementation of an onion-routing-inspired protocol desig
 - **Anonymous Communication**: Ensures that no single node knows both the sender and receiver.
 - **Layered Encryption**: Protects message content and routing information with multiple layers of encryption.
 - **Decentralized**: No central server or authority required; nodes communicate directly.
-- **Ephemeral Keys**: Uses ephemeral keys to ensure forward secrecy.
+- **Ephemeral Keys**: Uses ephemeral keys to ensure "return" secrecy - responder doesn't need to know requester's (potentially identifiable) public key.
 - **File Sharing**: Enables secure file sharing between nodes in the network.
 
 ---
@@ -39,13 +39,13 @@ Shallot Routing is an implementation of an onion-routing-inspired protocol desig
     - Each node only knows the previous and next nodes in the route.
 
 3. **Layered Encryption**:
-    - The sender encrypts the message in multiple layers, one for each node in the path.
+    - The original requester (sender) encrypts the message in multiple layers, one for each node in the path.
     - Each node decrypts its layer to reveal the next hop.
 
 4. **Requests and Responses**:
     - Communication is done through request-response pairs:
-        - **Request**: A sender creates a routing cycle and sends an encrypted message.
-        - **Response**: The receiver processes the request and sends the response back through the same path.
+        - **Request**: An **"originator"** requester (e.g. Alice) creates a routing cycle and sends the Shallot-encrypted message.
+        - **Response**: The ultimate **"recipient"** responder (intended by Alice, e.g. Bob) eventually receives and processes the request, then sends that response back *along the rest of the routing cycle* as encoded by the originator in the Shallot-header.
 
 ---
 
@@ -79,35 +79,37 @@ Shallot Routing is an implementation of an onion-routing-inspired protocol desig
     ```
 
 2. **Install Dependencies**:
-    Ensure you have Python 3.9+ installed. Then, install required libraries:
+    Ensure you have Python 3.11+ (3.10 needed for Django version, 3.11 needed for asyncio.timeout()) installed. Then, install required libraries:
     ```bash
     pip install -r requirements.txt
     ```
 
 4. **Start a Shallot Node**:
-    Each node must have a unique name. Run the Shallot server:
+    Each node must have a unique name. The following runs the Shallot server in the background and launches the Shallot commandline in the foreground:
     ```bash
     cd src
     python main.py <your_node_name> -p <port_number> -d <directory_to_send_and_receive>
     ```
-    This should launch a shallot commandline. There needs to be atleast 6 host for network to function well.
+    (Use `-h` for help and `-D` for diagnostic/demo verbose printing!)
+
+    We currently enforce a **6 node minimum** before the network may operate (and unlock the file sharing application). This is to ensure the routing cycles can be reasonably long, for security.
 ---
 
-## **Usage**
+## **Usage - *File Sharing* app (on top of Shallot Routing)**
 
-1.  Send a file to another node in the network:
+1. List files available on your node or another node in the network:
+```bash
+>> list [<node_x>]
+```
+
+2.  Send a file to another node:
 ```bash
 >> send <node_x> <file_x>
 ```
 
-2. Request a file from another node:
+3. Request a file from another node:
 ```bash
->> receive <node_y> <file_y>
-```
-
-3. List files available on another node:
-```bash
->> list <node_z>
+>> receive <node_x> <file_y>
 ```
 
 ---
