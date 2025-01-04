@@ -74,7 +74,7 @@ Shallot Routing is an implementation of an onion-routing-inspired protocol desig
 
 1. **Clone the Repository**:
     ```bash
-    git clone https://github.com/ldm2468/shallot-routing.git
+    git clone https://github.com/gaibo/shallot-routing.git
     cd shallot-routing
     ```
 
